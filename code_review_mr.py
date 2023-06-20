@@ -14,6 +14,9 @@ project_id = os.environ.get('PROJECT_ID', '<DEFAULT_PROJECT_ID>')
 merge_request_id = os.environ.get('MERGE_REQUEST_ID', '<DEFAULT_MERGE_REQUEST_ID>')
 azure_key = os.environ.get('AZURE_KEY', None)
 azure_endpoint = os.environ.get('AZURE_ENDPOINT', None)
+azure_api_version = os.environ.get('AZURE_API_VERSION', None)
+azure_deployment_id = os.environ.get('AZURE_DEPLOYMENT_ID', None)
+model = os.environ.get('MODEL', None)
 
 # GitLabのセットアップ
 gl = Gitlab(gitlab_url, private_token=gitlab_token, ssl_verify=gitlab_ssl_verify)
@@ -27,8 +30,10 @@ changes = merge_request.changes()
 diffs = changes.get('changes', [])
 
 # OpenAIのセットアップ
+openai.api_type = "azure" if azure_endpoint else None
 openai.api_key = azure_key if azure_key else "<OPENAI_API_KEY>"
 openai.api_base = azure_endpoint if azure_endpoint else "https://api.openai.com"
+openai.api_version = azure_api_version if azure_api_version else "<OPENAI_API_VERSION>"
 
 # 変更の解析
 for diff in diffs:
@@ -48,9 +53,9 @@ for diff in diffs:
 
         レビュー結果を以下に記載してください:
         """]
-        response = openai.Completion.create(engine="text-davinci-003", prompt=documents[0], max_tokens=500)
+        response = openai.ChatCompletion.create(deployment_id=azure_deployment_id, model=model, messages=[{"role": "user", "content": documents[0]}], max_tokens=500)
 
-        print(response)
+        print(response.choices[0].message.content)
 
         # AIのフィードバックをマージリクエストのコメントとして投稿
-        note = merge_request.notes.create({"body": response.choices[0].text.strip()})
+        note = merge_request.notes.create({"body": response.choices[0].message.content.strip()})
