@@ -1,6 +1,6 @@
 from gitlab import Gitlab
 import os
-import openai
+from openai import AzureOpenAI
 
 # disable warnings unverified HTTPS request
 import urllib3
@@ -12,11 +12,12 @@ gitlab_token = os.environ.get('GITLAB_TOKEN', '<DEFAULT_GITLAB_TOKEN>')
 gitlab_ssl_verify = os.environ.get('GITLAB_SSL_VERIFY', 'True').lower() == 'true'
 project_id = os.environ.get('PROJECT_ID', '<DEFAULT_PROJECT_ID>')
 merge_request_id = os.environ.get('MERGE_REQUEST_ID', '<DEFAULT_MERGE_REQUEST_ID>')
-azure_key = os.environ.get('AZURE_KEY', None)
-azure_endpoint = os.environ.get('AZURE_ENDPOINT', None)
-azure_api_version = os.environ.get('AZURE_API_VERSION', None)
-azure_deployment_id = os.environ.get('AZURE_DEPLOYMENT_ID', None)
-model = os.environ.get('MODEL', None)
+azure_key = os.environ.get('AZURE_KEY', '<OPENAI_API_KEY>')
+azure_endpoint = os.environ.get('AZURE_ENDPOINT', 'https://api.openai.com')
+azure_api_version = os.environ.get('AZURE_API_VERSION', '2023-09-01-preview')
+model = os.environ.get('MODEL', 'gpt-4')
+max_tokens = os.environ.get('MAX_TOKEN', 5000)
+debug = os.environ.get('DEBUG', False) # Trueならレスポンスを標準出力します
 
 # GitLabのセットアップ
 gl = Gitlab(gitlab_url, private_token=gitlab_token, ssl_verify=gitlab_ssl_verify)
@@ -29,13 +30,14 @@ merge_request = project.mergerequests.get(merge_request_id)
 changes = merge_request.changes()
 diffs = changes.get('changes', [])
 
-# OpenAIのセットアップ
-openai.api_type = "azure" if azure_endpoint else None
-openai.api_key = azure_key if azure_key else "<OPENAI_API_KEY>"
-openai.api_base = azure_endpoint if azure_endpoint else "https://api.openai.com"
-openai.api_version = azure_api_version if azure_api_version else "<OPENAI_API_VERSION>"
+# AzureOpenAIのセットアップ
+client = AzureOpenAI(
+    api_key = azure_key,
+    azure_endpoint = azure_endpoint,
+    api_version = azure_api_version
+)
 
-# 変更の解析
+# コード変更の解析
 for diff in diffs:
     old_code = diff.get('old_path')
     new_code = diff.get('new_path')
@@ -53,9 +55,14 @@ for diff in diffs:
 
         レビュー結果を以下に記載してください:
         """]
-        response = openai.ChatCompletion.create(deployment_id=azure_deployment_id, model=model, messages=[{"role": "user", "content": documents[0]}], max_tokens=500)
+        response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": documents[0]}],
+                max_tokens=max_tokens
+            )
 
-        print(response.choices[0].message.content)
+        res_msg = response.choices[0].message.content
+        print(res_msg) if debug else None
 
         # AIのフィードバックをマージリクエストのコメントとして投稿
-        note = merge_request.notes.create({"body": response.choices[0].message.content.strip()})
+        note = merge_request.notes.create({"body": res_msg.strip()})
