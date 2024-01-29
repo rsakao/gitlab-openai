@@ -3,7 +3,7 @@ name: ci
 on:
   push:
     branches:
-      - "azureopenai"
+      - "main"
   workflow_dispatch:
 
 jobs:
