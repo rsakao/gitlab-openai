@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "azureopenai"
+  workflow_dispatch:
 
 jobs:
   docker:
